@@ -139,6 +139,45 @@ function heartbeat() {
     this.isAlive = true;
 }
 
+
+function processMessage(call, type){
+    const http = require('http')
+
+    const data = JSON.stringify({
+        event: {
+            data: call,
+            type: type
+        }
+
+    })
+    
+    const options = {
+        hostname: '<SPLUNKHOST>',
+        port: 8088,
+        path: '/services/collector/event',
+        method: 'POST',
+        headers: {
+            'Authorization': 'Splunk <SPLUNKTOKEN>'
+        }
+    }
+    
+    const req = http.request(options, res => {
+       
+    
+        res.on('data', d => {
+        process.stdout.write(d)
+        })
+    })
+    
+    req.on('error', error => {
+        console.error(error)
+    })
+    
+    req.write(data)
+    req.end()
+    console.log("posted " + type)
+}
+
 clientWss.on('connection', function connection(ws, req) {
     var client = {
         socket: ws
@@ -204,6 +243,32 @@ clientWss.on('connection', function connection(ws, req) {
 });
 
 serverWss.on('connection', function connection(ws, req) {
+    ws.isAlive = true;
+    ws.on('pong', heartbeat);
+    console.log((new Date()) + ' WebSocket Connection accepted.');
+    ws.on('message', function incoming(message) {
+        try {            
+            var data = JSON.parse(message);
+        } catch (err) {
+            console.log("JSON Parsing Error: " + err);
+        }
+        if (data.type == 'calls_active') {
+            for (var i = 0; i < data.calls.length; i++) { 
+                dataX = data.calls[i];
+                for (var i = 0; i < dataX.sourceList.length; i++){
+                    processMessage(dataX.sourceList[i], 'unit')
+                }
+                processMessage(dataX, 'call')
+            }
+        }
+    });
+    ws.on('close', function(reasonCode, description) {
+        srv = null;
+    });
+
+});
+/*
+serverWss.on('connection', function connection(ws, req) {
 
 
     ws.isAlive = true;
@@ -261,7 +326,7 @@ serverWss.on('connection', function connection(ws, req) {
     });
 
 });
-
+*/
 
 server.listen(3010, function() {
     console.log('Web interface is available at: ' + server.address().port + '...');
